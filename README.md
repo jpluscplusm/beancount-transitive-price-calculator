@@ -109,6 +109,47 @@ $ cat [BD].price \
 2020-01-02 price A 1.96429 E
 ```
 
+## Beancount's implicit prices
+
+There's a beancount module (enabled in your main beancount file with `plugin "beancount.plugins.implicit_prices"`) that generates an implicit price directive every time you buy or sell a commodity, using the transaction cost to generate the prices.
+
+If you use this plugin, then instead of providing the input to this script by simply `cat`'ing the input files, instead use `bean-report all_prices` output.
+
+**Using this method also has the advantage of following any beancount "include" directives your ledger might contain.**
+
+For example, here I'll use my real-life beancount ledger prices to derive USD:EUR prices.
+
+First, let's check that there aren't any USD:EUR prices in my ledger or its includes:
+
+```
+$ bean-report ledger.beancount all_prices \
+  | grep -c 'USD.*EUR'
+0
+```
+
+Now let's use the transitive price calculator to process bean-report's output, using my knowledge that it contains both USD and EUR prices in terms of GBP:
+
+```
+$ bean-report ledger.beancount all_prices \
+  | awk -f ../beancount-transitive-price-calculator/transitive-prices.awk paths="USD:GBP:EUR" \
+  | grep -c 'USD.*EUR'
+2734
+```
+
+Lastly, let's randomly sample the output to check the accuracy:
+
+```
+$ bean-report ledger.beancount all_prices \
+  | awk -f ../beancount-transitive-price-calculator/transitive-prices.awk paths="USD:GBP:EUR" \
+  | grep 'USD.*EUR' \
+  | shuf -n 1
+2012-07-24 price USD 0.824832 EUR
+```
+
+Comparing against [an historic online source](https://www.exchangerates.org.uk/USD-EUR-24_07_2012-exchange-rate-history.html), which shows a rate of 0.8289, we can see that the difference is `( ( 0.8289 - 0.824832 ) / 0.8289 ) == 0.004907`, or about half a percentage point. This is well within the bounds of the accuracy acheivable from consumer data sources and differing (mid-)market rates, etc.
+
+Take into account the additional fact that real life currency rates [aren't actually transitive](https://travel.stackexchange.com/a/88969), especially within the consumer market context to which most of us have access, and we're happy that the script's performing as well as it can, given its constraints.
+
 ## Misc. internal notes
 
 For each input price provided, the direct price (A in terms of B, which we'll call "A:B") is stored for that day in the "direct" price database. When input files contain price data with duplicate A:B entries for the same day, the final entry observed is stored. 
